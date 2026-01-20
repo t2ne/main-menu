@@ -256,20 +256,13 @@ const EAGER_ICON_COUNT = 8;
 
         try {
           const tags = tile.dataset.tags ?? "";
-          const isSelfHosted = tags.split(",").includes("Self-Hosted");
-
-          if (isSelfHosted) {
-            const origin = new URL(tile.href).origin;
+          if (tags.split(",").includes("Self-Hosted")) {
             const o = {
               mode: "no-cors",
               cache: "no-store",
               signal: controller.signal,
             } as const;
-            try {
-              await fetch(`${origin}/favicon.ico`, o);
-            } catch {
-              await fetch(`${origin}/images/server_logo.png`, o);
-            }
+            await fetch(new URL("/", tile.href), o);
             return true;
           }
 
