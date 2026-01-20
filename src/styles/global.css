@@ -463,6 +463,17 @@ input::placeholder {
     0 0 18px rgba(245, 158, 11, 0.26);
 }
 
+.status[data-status="vpn"] {
+  color: rgba(147, 197, 253, 0.85);
+  border-color: rgba(59, 130, 246, 0.22);
+}
+.status[data-status="vpn"] .dot {
+  background: #3b82f6;
+  box-shadow:
+    0 0 0 2px rgba(0, 0, 0, 0.22) inset,
+    0 0 18px rgba(59, 130, 246, 0.26);
+}
+
 .badge-row {
   display: flex;
   justify-content: space-between;
