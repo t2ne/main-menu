@@ -1,0 +1,418 @@
+---
+import BaseHead from "../components/BaseHead.astro";
+import { SITE_TITLE, SITE_DESCRIPTION } from "../consts";
+import { ALL_TAGS, APPS } from "../apps";
+import { Image } from "astro:assets";
+
+const EAGER_ICON_COUNT = 8;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <BaseHead title={SITE_TITLE} description={SITE_DESCRIPTION} />
+  </head>
+  <body>
+    <div class="bg" aria-hidden="true"></div>
+    <div class="wrap">
+      <header class="top">
+        <div class="brand">
+          <span class="mark" aria-hidden="true"></span>
+          <span class="word">t2ne</span>
+        </div>
+        <h1 class="title">welcome back.</h1>
+        <p class="subtitle">search and launch.</p>
+      </header>
+
+      <section class="controls" aria-label="Search and filters">
+        <label class="sr-only" for="q">Search</label>
+        <div class="field">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              fill="currentColor"
+              d="M10 4a6 6 0 104.472 10.03l4.249 4.25 1.414-1.415-4.25-4.249A6 6 0 0010 4zm0 2a4 4 0 110 8 4 4 0 010-8z"
+            ></path>
+          </svg>
+          <input
+            id="q"
+            name="q"
+            type="search"
+            placeholder="Search for apps"
+            autocomplete="off"
+          />
+        </div>
+
+        <label class="sr-only" for="tag">Filter by tag</label>
+        <div class="field select">
+          <select id="tag" name="tag">
+            <option value="">All tags</option>
+            {ALL_TAGS.map((t) => <option value={t}>{t}</option>)}
+          </select>
+        </div>
+
+        <div class="meta" aria-live="polite">
+          <span id="count"></span>
+          <button
+            class="refresh"
+            id="refresh"
+            type="button"
+            aria-label="Refresh statuses"
+            title="Refresh statuses"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                fill="currentColor"
+                d="M17.65 6.35A7.95 7.95 0 0012 4a8 8 0 108 8h-2a6 6 0 11-6-6c1.66 0 3.14.69 4.22 1.78L14 10h6V4l-2.35 2.35z"
+              ></path>
+            </svg>
+          </button>
+        </div>
+      </section>
+
+      <main class="grid" id="grid" aria-label="Apps">
+        {
+          APPS.map((app, i) => (
+            <a
+              class="tile"
+              href={app.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              data-app-id={app.id}
+              data-name={app.name.toLowerCase()}
+              data-tags={app.tags.join(",")}
+            >
+              <div class="tile-inner">
+                <div class="badge-row">
+                  {app.tags.slice(0, 1).map((tag) => (
+                    <span class="pill">{tag}</span>
+                  ))}
+                  <div
+                    class="status"
+                    data-status="unknown"
+                    role="status"
+                    aria-label="Status: unknown"
+                  >
+                    <span class="dot" aria-hidden="true" />
+                    <span class="text">…</span>
+                  </div>
+                </div>
+                <div class="logo" aria-hidden="true">
+                  <Image
+                    src={app.iconUrl}
+                    width={44}
+                    height={44}
+                    alt=""
+                    loading={i < EAGER_ICON_COUNT ? "eager" : "lazy"}
+                    decoding="async"
+                    fetchpriority={i < EAGER_ICON_COUNT ? "high" : "auto"}
+                  />
+                </div>
+                <div class="name">{app.name}</div>
+              </div>
+            </a>
+          ))
+        }
+      </main>
+
+      <p class="empty" id="empty" hidden>No matches.</p>
+    </div>
+
+    <!-- Transparent footer with centered "github" link -->
+    <footer class="footer">
+      <a
+        href="https://github.com/t2ne"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="footer-link">github</a
+      >
+    </footer>
+
+    <script>
+      const root = document.documentElement;
+      const q = document.getElementById("q") as HTMLInputElement | null;
+      const tag = document.getElementById("tag") as HTMLSelectElement | null;
+      const tiles = Array.from(
+        document.querySelectorAll<HTMLElement>("[data-name]"),
+      );
+      const count = document.getElementById("count") as HTMLSpanElement | null;
+      const empty = document.getElementById(
+        "empty",
+      ) as HTMLParagraphElement | null;
+
+      function applyFilter() {
+        const query = (q?.value ?? "").trim().toLowerCase();
+        const selected = (tag?.value ?? "").trim();
+
+        let visible = 0;
+        for (const el of tiles) {
+          const name = el.getAttribute("data-name") || "";
+          const tags = (el.getAttribute("data-tags") || "").split(",");
+          const matchQ = !query || name.includes(query);
+          const matchT = !selected || tags.includes(selected);
+          const show = matchQ && matchT;
+          el.toggleAttribute("hidden", !show);
+          if (show) visible++;
+        }
+
+        if (count) count.textContent = `${visible} / ${tiles.length}`;
+        if (empty) empty.hidden = visible !== 0;
+      }
+
+      q?.addEventListener("input", applyFilter);
+      tag?.addEventListener("change", applyFilter);
+      applyFilter();
+
+      const reduceMotion = window.matchMedia(
+        "(prefers-reduced-motion: reduce)",
+      ).matches;
+      if (!reduceMotion) {
+        function updateTileShine(clientX: number, clientY: number) {
+          const radius = 220;
+          for (const el of tiles) {
+            if (el.hasAttribute("hidden")) continue;
+
+            const rect = el.getBoundingClientRect();
+            const corners = [
+              { x: rect.left, y: rect.top, sx: 0, sy: 0 },
+              { x: rect.right, y: rect.top, sx: 100, sy: 0 },
+              { x: rect.left, y: rect.bottom, sx: 0, sy: 100 },
+              { x: rect.right, y: rect.bottom, sx: 100, sy: 100 },
+            ];
+
+            let best = corners[0];
+            let bestD = Infinity;
+            for (const c of corners) {
+              const d = Math.hypot(clientX - c.x, clientY - c.y);
+              if (d < bestD) {
+                bestD = d;
+                best = c;
+              }
+            }
+
+            const intensity = Math.max(0, 1 - bestD / radius);
+            el.style.setProperty("--s", intensity.toFixed(3));
+            el.style.setProperty("--sx", `${best.sx}%`);
+            el.style.setProperty("--sy", `${best.sy}%`);
+          }
+        }
+
+        window.addEventListener(
+          "pointermove",
+          (e) => {
+            root.style.setProperty("--mx", `${e.clientX}px`);
+            root.style.setProperty("--my", `${e.clientY}px`);
+            updateTileShine(e.clientX, e.clientY);
+          },
+          { passive: true },
+        );
+
+        function resetTileShine() {
+          for (const el of tiles) el.style.setProperty("--s", "0");
+        }
+
+        window.addEventListener("blur", resetTileShine);
+        document.addEventListener("mouseleave", resetTileShine);
+      }
+
+      window.addEventListener("keydown", (e) => {
+        if (e.key === "/" && document.activeElement !== q) {
+          e.preventDefault();
+          q?.focus();
+        }
+      });
+
+      type TileStatus = "unknown" | "checking" | "up" | "down";
+
+      const STATUS_CONCURRENCY = 8;
+      const STATUS_REFRESH_MS = 90_000;
+      const STATUS_API = "/api/status";
+      const STATUS_CACHE_KEY = "appStatusCache:v1";
+      const STATUS_CACHE_MAX_AGE_MS = 10 * 60_000;
+
+      function setTileStatus(tile: HTMLElement, status: TileStatus) {
+        const badge = tile.querySelector<HTMLElement>(".status");
+        if (!badge) return;
+
+        badge.setAttribute("data-status", status);
+        badge.setAttribute("aria-label", `Status: ${status}`);
+
+        const text = badge.querySelector<HTMLElement>(".text");
+        if (!text) return;
+
+        if (status === "checking") text.textContent = "…";
+        else if (status === "up") text.textContent = "up";
+        else if (status === "down") text.textContent = "down";
+        else text.textContent = "?";
+      }
+
+      // Paint cached statuses immediately for a snappy first render.
+      const initialCache = loadCachedStatuses();
+      const now = Date.now();
+      for (const el of tiles) {
+        const id = (el.getAttribute("data-app-id") ?? "").trim();
+        if (!id) continue;
+        const cached = initialCache.get(id);
+        if (!cached) continue;
+        if (now - cached.ts > STATUS_CACHE_MAX_AGE_MS) continue;
+        setTileStatus(el, cached.ok ? "up" : "down");
+      }
+
+      function loadCachedStatuses(): Map<string, { ok: boolean; ts: number }> {
+        try {
+          const raw = window.localStorage.getItem(STATUS_CACHE_KEY);
+          if (!raw) return new Map();
+          const parsed = JSON.parse(raw) as Record<
+            string,
+            { ok?: unknown; ts?: unknown }
+          >;
+          const map = new Map<string, { ok: boolean; ts: number }>();
+          for (const [id, v] of Object.entries(parsed)) {
+            if (typeof v?.ok !== "boolean") continue;
+            if (typeof v?.ts !== "number") continue;
+            map.set(id, { ok: v.ok, ts: v.ts });
+          }
+          return map;
+        } catch {
+          return new Map();
+        }
+      }
+
+      function saveCachedStatuses(
+        map: Map<string, { ok: boolean; ts: number }>,
+      ) {
+        try {
+          const obj: Record<string, { ok: boolean; ts: number }> = {};
+          for (const [id, v] of map) obj[id] = v;
+          window.localStorage.setItem(STATUS_CACHE_KEY, JSON.stringify(obj));
+        } catch {
+          // ignore
+        }
+      }
+
+      async function pingApp(appId: string): Promise<boolean> {
+        const controller = new AbortController();
+        const timeoutId = window.setTimeout(() => controller.abort(), 6500);
+
+        try {
+          const res = await fetch(STATUS_API, {
+            method: "POST",
+            cache: "no-store",
+            headers: {
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({ id: appId }),
+            signal: controller.signal,
+          });
+
+          if (!res.ok) return false;
+          const data = (await res.json().catch(() => null)) as {
+            ok?: boolean;
+          } | null;
+          return Boolean(data?.ok);
+        } catch {
+          return false;
+        } finally {
+          window.clearTimeout(timeoutId);
+        }
+      }
+
+      type StatusCheckContext = {
+        tilesById: Map<string, HTMLElement>;
+        pingMemo: (appId: string) => Promise<boolean>;
+        statusCache: Map<string, { ok: boolean; ts: number }>;
+      };
+
+      async function checkTile(tile: HTMLElement, ctx: StatusCheckContext) {
+        const appId = (tile.getAttribute("data-app-id") ?? "").trim();
+        if (!appId) {
+          setTileStatus(tile, "unknown");
+          return;
+        }
+
+        setTileStatus(tile, "checking");
+        const ok = await ctx.pingMemo(appId);
+        setTileStatus(tile, ok ? "up" : "down");
+
+        // Persist last-known status so next load is instant.
+        ctx.statusCache.set(appId, { ok, ts: Date.now() });
+        saveCachedStatuses(ctx.statusCache);
+      }
+
+      async function checkStatuses(options?: { markChecking?: boolean }) {
+        const markChecking = options?.markChecking ?? false;
+        const tilesById = new Map<string, HTMLElement>();
+        for (const el of tiles) {
+          const id = el.getAttribute("data-app-id");
+          if (id) tilesById.set(id, el);
+        }
+
+        const statusCache = loadCachedStatuses();
+
+        const pingCache = new Map<string, Promise<boolean>>();
+        function pingMemo(appId: string): Promise<boolean> {
+          const existing = pingCache.get(appId);
+          if (existing) return existing;
+          const p = pingApp(appId);
+          pingCache.set(appId, p);
+          return p;
+        }
+
+        const ctx: StatusCheckContext = {
+          tilesById,
+          pingMemo,
+          statusCache,
+        };
+
+        const queue = [...tiles];
+        // Don't pre-mark everything as "checking"; keep cached state visible and
+        // let each tile flip to checking only when its request starts.
+        void markChecking;
+
+        const workers = Array.from({ length: STATUS_CONCURRENCY }, async () => {
+          while (queue.length) {
+            const next = queue.shift();
+            if (!next) break;
+            await checkTile(next, ctx);
+          }
+        });
+
+        await Promise.all(workers);
+      }
+
+      // Initial status check + periodic refresh.
+      let statusRun: Promise<void> | null = null;
+      async function runStatusCheck() {
+        if (statusRun) return;
+        statusRun = (async () => {
+          try {
+            await checkStatuses({ markChecking: false });
+          } finally {
+            statusRun = null;
+          }
+        })();
+      }
+
+      const refreshBtn = document.getElementById(
+        "refresh",
+      ) as HTMLButtonElement | null;
+      refreshBtn?.addEventListener("click", () => {
+        // retrigger the animation even on rapid clicks
+        refreshBtn.classList.remove("spinning");
+        void refreshBtn.offsetWidth;
+        refreshBtn.classList.add("spinning");
+        runStatusCheck();
+      });
+
+      refreshBtn?.addEventListener("animationend", (e) => {
+        if (e.target instanceof SVGElement)
+          refreshBtn.classList.remove("spinning");
+      });
+
+      runStatusCheck();
+      window.setInterval(
+        () => checkStatuses({ markChecking: false }),
+        STATUS_REFRESH_MS,
+      );
+    </script>
+  </body>
+</html>

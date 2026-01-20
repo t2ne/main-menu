@@ -1,0 +1,17 @@
+---
+import BaseHead from "../components/BaseHead.astro";
+import { SITE_DESCRIPTION, SITE_TITLE } from "../consts";
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <BaseHead title={SITE_TITLE} description={SITE_DESCRIPTION} />
+    <meta http-equiv="refresh" content="0; url=/" />
+  </head>
+  <body>
+    <noscript>
+      <p><a href="/">Go to home</a></p>
+    </noscript>
+  </body>
+</html>
