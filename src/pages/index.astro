@@ -82,9 +82,7 @@ const EAGER_ICON_COUNT = 8;
             >
               <div class="tile-inner">
                 <div class="badge-row">
-                  {app.tags.slice(0, 1).map((tag) => (
-                    <span class="pill">{tag}</span>
-                  ))}
+                  {app.tags[0] && <span class="pill">{app.tags[0]}</span>}
                   <div
                     class="status"
                     data-status="unknown"
@@ -148,12 +146,10 @@ const EAGER_ICON_COUNT = 8;
 
         let visible = 0;
         for (const el of tiles) {
-          const name = el.getAttribute("data-name") || "";
-          const tags = (el.getAttribute("data-tags") || "").split(",");
-          const matchQ = !query || name.includes(query);
-          const matchT = !selected || tags.includes(selected);
-          const show = matchQ && matchT;
-          el.toggleAttribute("hidden", !show);
+          const show =
+            (!query || (el.dataset.name ?? "").includes(query)) &&
+            (!selected || (el.dataset.tags ?? "").includes(selected));
+          el.hidden = !show;
           if (show) visible++;
         }
 
@@ -224,96 +220,69 @@ const EAGER_ICON_COUNT = 8;
         }
       });
 
-      type TileStatus = "unknown" | "checking" | "up" | "down" | "vpn";
+      type S = "unknown" | "checking" | "up" | "down" | "vpn";
 
       const STATUS_REFRESH_MS = 90_000;
       const STATUS_TIMEOUT_MS = 2500;
       const CLIENT_TIMEOUT_MS = 1200;
 
-      function setTileStatus(tile: HTMLElement, status: TileStatus) {
-        const badge = tile.querySelector<HTMLElement>(".status");
-        if (!badge) return;
-
-        badge.setAttribute("data-status", status);
-        badge.setAttribute("aria-label", `Status: ${status}`);
-
-        const text = badge.querySelector<HTMLElement>(".text");
-        if (!text) return;
-
-        if (status === "checking") text.textContent = "…";
-        else if (status === "up") text.textContent = "up";
-        else if (status === "down") text.textContent = "down";
-        else if (status === "vpn") text.textContent = "vpn";
-        else text.textContent = "?";
+      function setTileStatus(tile: HTMLElement, status: S) {
+        const b = tile.querySelector<HTMLElement>(".status");
+        if (!b) return;
+        b.dataset.status = status;
+        b.setAttribute("aria-label", `Status: ${status}`);
+        const t = b.querySelector<HTMLElement>(".text");
+        if (t)
+          t.textContent =
+            status === "checking" ? "…" : status === "unknown" ? "?" : status;
       }
 
-      function isSelfHosted(tile: HTMLAnchorElement): boolean {
-        return (tile.dataset.tags ?? "").includes("Self-Hosted");
-      }
-
-      async function ping(
-        tile: HTMLAnchorElement,
-        self: boolean,
-      ): Promise<boolean> {
-        const controller = new AbortController();
-        const timeoutId = window.setTimeout(
-          () => controller.abort(),
+      function ping(tile: HTMLAnchorElement, self: boolean): Promise<boolean> {
+        const c = new AbortController();
+        const t = setTimeout(
+          () => c.abort(),
           self ? CLIENT_TIMEOUT_MS : STATUS_TIMEOUT_MS,
         );
-
-        try {
-          const u = new URL(tile.href);
-          const p = u.hostname === "pass.no-tone.com" ? "/favicon.ico" : "/";
-          await fetch(new URL(p, u), {
-            mode: "no-cors",
-            cache: "no-store",
-            signal: controller.signal,
-          });
-          return true;
-        } catch {
-          return false;
-        } finally {
-          window.clearTimeout(timeoutId);
-        }
+        const u = new URL(tile.href);
+        const p = u.hostname === "pass.no-tone.com" ? "/favicon.ico" : "/";
+        return fetch(new URL(p, u), {
+          mode: "no-cors",
+          cache: "no-store",
+          signal: c.signal,
+        })
+          .then(
+            () => true,
+            () => false,
+          )
+          .finally(() => clearTimeout(t));
       }
 
       async function checkStatuses(): Promise<void> {
         let tailnet = false;
-        const seen = new Map<
-          HTMLAnchorElement,
-          { self: boolean; ok: boolean }
-        >();
-
+        const pending: HTMLAnchorElement[] = [];
         await Promise.all(
           tiles.map(async (tile) => {
             setTileStatus(tile, "checking");
-            const self = isSelfHosted(tile);
+            const self = (tile.dataset.tags ?? "").includes("Self-Hosted");
             const ok = await ping(tile, self);
-            seen.set(tile, { self, ok });
-
             if (!self) return setTileStatus(tile, ok ? "up" : "down");
             if (ok) {
               tailnet = true;
               return setTileStatus(tile, "up");
             }
-            return setTileStatus(tile, "vpn");
+            pending.push(tile);
+            setTileStatus(tile, "vpn");
           }),
         );
-
-        if (tailnet)
-          for (const [tile, s] of seen)
-            if (s.self && !s.ok) setTileStatus(tile, "down");
+        if (tailnet) for (const tile of pending) setTileStatus(tile, "down");
       }
 
       // Initial status check + periodic refresh.
       let statusRunning = false;
-      function runStatusCheck() {
-        if (statusRunning) return;
-        statusRunning = true;
-        checkStatuses().finally(() => {
-          statusRunning = false;
-        });
-      }
+      const runStatusCheck = () =>
+        !statusRunning &&
+        ((statusRunning = true),
+        checkStatuses().finally(() => (statusRunning = false)));
 
       const refreshBtn = document.getElementById(
         "refresh",
@@ -326,10 +295,9 @@ const EAGER_ICON_COUNT = 8;
         runStatusCheck();
       });
 
-      refreshBtn?.addEventListener("animationend", (e) => {
-        if (e.target instanceof SVGElement)
-          refreshBtn.classList.remove("spinning");
-      });
+      refreshBtn?.addEventListener("animationend", () =>
+        refreshBtn.classList.remove("spinning"),
+      );
 
       runStatusCheck();
       window.setInterval(runStatusCheck, STATUS_REFRESH_MS);
