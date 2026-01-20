@@ -127,7 +127,8 @@ const EAGER_ICON_COUNT = 8;
         href="https://no-tone.com"
         target="_blank"
         rel="noopener noreferrer"
-        class="footer-link">main</a>
+        class="footer-link">main</a
+      >
     </footer>
 
     <script>
@@ -135,7 +136,7 @@ const EAGER_ICON_COUNT = 8;
       const q = document.getElementById("q") as HTMLInputElement | null;
       const tag = document.getElementById("tag") as HTMLSelectElement | null;
       const tiles = Array.from(
-        document.querySelectorAll<HTMLElement>("[data-name]"),
+        document.querySelectorAll<HTMLAnchorElement>("a.tile[data-name]"),
       );
       const count = document.getElementById("count") as HTMLSpanElement | null;
       const empty = document.getElementById(
@@ -228,6 +229,7 @@ const EAGER_ICON_COUNT = 8;
 
       const STATUS_REFRESH_MS = 90_000;
       const STATUS_API = "/api/status";
+      const STATUS_TIMEOUT_MS = 4500;
 
       function setTileStatus(tile: HTMLElement, status: TileStatus) {
         const badge = tile.querySelector<HTMLElement>(".status");
@@ -245,17 +247,36 @@ const EAGER_ICON_COUNT = 8;
         else text.textContent = "?";
       }
 
-      async function pingApp(appId: string): Promise<boolean> {
+      async function ping(tile: HTMLAnchorElement): Promise<boolean> {
         const controller = new AbortController();
-        const timeoutId = window.setTimeout(() => controller.abort(), 2500);
+        const timeoutId = window.setTimeout(
+          () => controller.abort(),
+          STATUS_TIMEOUT_MS,
+        );
 
         try {
-          const url = `${STATUS_API}?id=${encodeURIComponent(appId)}`;
-          const res = await fetch(url, {
-            cache: "no-store",
-            signal: controller.signal,
-          });
+          const tags = tile.dataset.tags ?? "";
+          const isSelfHosted = tags.split(",").includes("Self-Hosted");
 
+          if (isSelfHosted) {
+            const origin = new URL(tile.href).origin;
+            await fetch(`${origin}/favicon.ico`, {
+              mode: "no-cors",
+              cache: "no-store",
+              signal: controller.signal,
+            });
+            return true;
+          }
+
+          const appId = tile.dataset.appId ?? "";
+          if (!appId) return false;
+          const res = await fetch(
+            `${STATUS_API}?id=${encodeURIComponent(appId)}`,
+            {
+              cache: "no-store",
+              signal: controller.signal,
+            },
+          );
           if (!res.ok) return false;
           const data = (await res.json().catch(() => null)) as {
             ok?: boolean;
@@ -270,10 +291,8 @@ const EAGER_ICON_COUNT = 8;
 
       async function checkStatuses(): Promise<void> {
         const tasks = tiles.map(async (tile) => {
-          const appId = (tile.getAttribute("data-app-id") ?? "").trim();
-          if (!appId) return;
           setTileStatus(tile, "checking");
-          const ok = await pingApp(appId);
+          const ok = await ping(tile);
           setTileStatus(tile, ok ? "up" : "down");
         });
 
