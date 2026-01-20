@@ -2,10 +2,8 @@ import type { App } from "./apps";
 
 const TIMEOUT_MS = 1200;
 
-function isUpStatus(status: number): boolean {
-	if (status >= 500) return false;
-	if (status === 404 || status === 410) return false;
-	return true;
+function isHealthyStatus(status: number): boolean {
+	return status >= 200 && status < 400;
 }
 
 function probeUrl(app: App): string {
@@ -20,7 +18,7 @@ export async function isAppUp(app: App, timeoutMs = TIMEOUT_MS): Promise<boolean
 	const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
 	try {
-		const res = await fetch(url, {
+		const headRes = await fetch(url, {
 			method: "HEAD",
 			redirect: "follow",
 			cache: "no-store",
@@ -28,8 +26,18 @@ export async function isAppUp(app: App, timeoutMs = TIMEOUT_MS): Promise<boolean
 		});
 
 		// 405 still means the host answered => up.
-		if (res.status === 405) return true;
-		return isUpStatus(res.status);
+		if (headRes.status === 405) return true;
+		if (isHealthyStatus(headRes.status)) return true;
+
+		// Some providers (and some app servers) block HEAD but allow GET.
+		// If HEAD isn't clearly healthy, try a lightweight GET before declaring down.
+		const getRes = await fetch(url, {
+			method: "GET",
+			redirect: "follow",
+			cache: "no-store",
+			signal: controller.signal,
+		});
+		return isHealthyStatus(getRes.status);
 	} catch (error) {
 		return false;
 	} finally {
