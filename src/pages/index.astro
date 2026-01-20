@@ -264,30 +264,28 @@ const EAGER_ICON_COUNT = 8;
         );
 
         try {
-          const appId = tile.dataset.appId ?? "";
-          if (appId) {
-            const ok = await fetch(
-              `${STATUS_API}?id=${encodeURIComponent(appId)}`,
-              { cache: "no-store", signal: controller.signal },
-            )
-              .then((r) => (r.ok ? r.json() : null))
-              .then((d) => Boolean((d as { ok?: boolean } | null)?.ok))
-              .catch(() => false);
-            if (ok) return { ok: true, via: "api" };
-            if (!self) return { ok: false, via: "api" };
-          } else if (!self) {
-            return { ok: false, via: "api" };
+          if (self) {
+            const u = new URL(tile.href);
+            const p = u.hostname === "pass.no-tone.com" ? "/favicon.ico" : "/";
+            const o = {
+              mode: "no-cors",
+              cache: "no-store",
+              signal: controller.signal,
+            } as const;
+            await fetch(new URL(p, u), o);
+            return { ok: true, via: "client" };
           }
 
-          const u = new URL(tile.href);
-          const p = u.hostname === "pass.no-tone.com" ? "/favicon.ico" : "/";
-          const o = {
-            mode: "no-cors",
-            cache: "no-store",
-            signal: controller.signal,
-          } as const;
-          await fetch(new URL(p, u), o);
-          return { ok: true, via: "client" };
+          const appId = tile.dataset.appId ?? "";
+          if (!appId) return { ok: false, via: "api" };
+          const ok = await fetch(
+            `${STATUS_API}?id=${encodeURIComponent(appId)}`,
+            { cache: "no-store", signal: controller.signal },
+          )
+            .then((r) => (r.ok ? r.json() : null))
+            .then((d) => Boolean((d as { ok?: boolean } | null)?.ok))
+            .catch(() => false);
+          return { ok, via: "api" };
         } catch {
           return { ok: false, via: "client" };
         } finally {
