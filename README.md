@@ -4,6 +4,8 @@ A super simple web app for quickly accessing links to your self-hosted applicati
 
 Website: [apps.no-tone.com](https://apps.no-tone.com)
 
+<img width="1440" height="900" alt="Image" src="https://github.com/user-attachments/assets/6bdf969f-6a51-45ea-b37e-56ca5c5af0ff" />
+
 ---
 
 ## What is this?
