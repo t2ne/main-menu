@@ -1,7 +1,7 @@
 ---
 import BaseHead from "../components/BaseHead.astro";
 import { SITE_TITLE, SITE_DESCRIPTION } from "../consts";
-import { ALL_TAGS, APPS } from "../apps";
+import { ALL_TAGS, APPS } from "../lib/apps";
 import { Image } from "astro:assets";
 
 const EAGER_ICON_COUNT = 8;
@@ -117,14 +117,17 @@ const EAGER_ICON_COUNT = 8;
       <p class="empty" id="empty" hidden>No matches.</p>
     </div>
 
-    <!-- Transparent footer with centered "github" link -->
     <footer class="footer">
       <a
         href="https://github.com/t2ne"
         target="_blank"
         rel="noopener noreferrer"
         class="footer-link">github</a
-      >
+      > / <a
+        href="https://no-tone.com"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="footer-link">main</a>
     </footer>
 
     <script>
@@ -223,11 +226,8 @@ const EAGER_ICON_COUNT = 8;
 
       type TileStatus = "unknown" | "checking" | "up" | "down";
 
-      const STATUS_CONCURRENCY = 8;
       const STATUS_REFRESH_MS = 90_000;
       const STATUS_API = "/api/status";
-      const STATUS_CACHE_KEY = "appStatusCache:v1";
-      const STATUS_CACHE_MAX_AGE_MS = 10 * 60_000;
 
       function setTileStatus(tile: HTMLElement, status: TileStatus) {
         const badge = tile.querySelector<HTMLElement>(".status");
@@ -245,62 +245,14 @@ const EAGER_ICON_COUNT = 8;
         else text.textContent = "?";
       }
 
-      // Paint cached statuses immediately for a snappy first render.
-      const initialCache = loadCachedStatuses();
-      const now = Date.now();
-      for (const el of tiles) {
-        const id = (el.getAttribute("data-app-id") ?? "").trim();
-        if (!id) continue;
-        const cached = initialCache.get(id);
-        if (!cached) continue;
-        if (now - cached.ts > STATUS_CACHE_MAX_AGE_MS) continue;
-        setTileStatus(el, cached.ok ? "up" : "down");
-      }
-
-      function loadCachedStatuses(): Map<string, { ok: boolean; ts: number }> {
-        try {
-          const raw = window.localStorage.getItem(STATUS_CACHE_KEY);
-          if (!raw) return new Map();
-          const parsed = JSON.parse(raw) as Record<
-            string,
-            { ok?: unknown; ts?: unknown }
-          >;
-          const map = new Map<string, { ok: boolean; ts: number }>();
-          for (const [id, v] of Object.entries(parsed)) {
-            if (typeof v?.ok !== "boolean") continue;
-            if (typeof v?.ts !== "number") continue;
-            map.set(id, { ok: v.ok, ts: v.ts });
-          }
-          return map;
-        } catch {
-          return new Map();
-        }
-      }
-
-      function saveCachedStatuses(
-        map: Map<string, { ok: boolean; ts: number }>,
-      ) {
-        try {
-          const obj: Record<string, { ok: boolean; ts: number }> = {};
-          for (const [id, v] of map) obj[id] = v;
-          window.localStorage.setItem(STATUS_CACHE_KEY, JSON.stringify(obj));
-        } catch {
-          // ignore
-        }
-      }
-
       async function pingApp(appId: string): Promise<boolean> {
         const controller = new AbortController();
-        const timeoutId = window.setTimeout(() => controller.abort(), 6500);
+        const timeoutId = window.setTimeout(() => controller.abort(), 2500);
 
         try {
-          const res = await fetch(STATUS_API, {
-            method: "POST",
+          const url = `${STATUS_API}?id=${encodeURIComponent(appId)}`;
+          const res = await fetch(url, {
             cache: "no-store",
-            headers: {
-              "content-type": "application/json",
-            },
-            body: JSON.stringify({ id: appId }),
             signal: controller.signal,
           });
 
@@ -316,80 +268,26 @@ const EAGER_ICON_COUNT = 8;
         }
       }
 
-      type StatusCheckContext = {
-        tilesById: Map<string, HTMLElement>;
-        pingMemo: (appId: string) => Promise<boolean>;
-        statusCache: Map<string, { ok: boolean; ts: number }>;
-      };
-
-      async function checkTile(tile: HTMLElement, ctx: StatusCheckContext) {
-        const appId = (tile.getAttribute("data-app-id") ?? "").trim();
-        if (!appId) {
-          setTileStatus(tile, "unknown");
-          return;
-        }
-
-        setTileStatus(tile, "checking");
-        const ok = await ctx.pingMemo(appId);
-        setTileStatus(tile, ok ? "up" : "down");
-
-        // Persist last-known status so next load is instant.
-        ctx.statusCache.set(appId, { ok, ts: Date.now() });
-        saveCachedStatuses(ctx.statusCache);
-      }
-
-      async function checkStatuses(options?: { markChecking?: boolean }) {
-        const markChecking = options?.markChecking ?? false;
-        const tilesById = new Map<string, HTMLElement>();
-        for (const el of tiles) {
-          const id = el.getAttribute("data-app-id");
-          if (id) tilesById.set(id, el);
-        }
-
-        const statusCache = loadCachedStatuses();
-
-        const pingCache = new Map<string, Promise<boolean>>();
-        function pingMemo(appId: string): Promise<boolean> {
-          const existing = pingCache.get(appId);
-          if (existing) return existing;
-          const p = pingApp(appId);
-          pingCache.set(appId, p);
-          return p;
-        }
-
-        const ctx: StatusCheckContext = {
-          tilesById,
-          pingMemo,
-          statusCache,
-        };
-
-        const queue = [...tiles];
-        // Don't pre-mark everything as "checking"; keep cached state visible and
-        // let each tile flip to checking only when its request starts.
-        void markChecking;
-
-        const workers = Array.from({ length: STATUS_CONCURRENCY }, async () => {
-          while (queue.length) {
-            const next = queue.shift();
-            if (!next) break;
-            await checkTile(next, ctx);
-          }
+      async function checkStatuses(): Promise<void> {
+        const tasks = tiles.map(async (tile) => {
+          const appId = (tile.getAttribute("data-app-id") ?? "").trim();
+          if (!appId) return;
+          setTileStatus(tile, "checking");
+          const ok = await pingApp(appId);
+          setTileStatus(tile, ok ? "up" : "down");
         });
 
-        await Promise.all(workers);
+        await Promise.allSettled(tasks);
       }
 
       // Initial status check + periodic refresh.
-      let statusRun: Promise<void> | null = null;
-      async function runStatusCheck() {
-        if (statusRun) return;
-        statusRun = (async () => {
-          try {
-            await checkStatuses({ markChecking: false });
-          } finally {
-            statusRun = null;
-          }
-        })();
+      let statusRunning = false;
+      function runStatusCheck() {
+        if (statusRunning) return;
+        statusRunning = true;
+        checkStatuses().finally(() => {
+          statusRunning = false;
+        });
       }
 
       const refreshBtn = document.getElementById(
@@ -409,10 +307,7 @@ const EAGER_ICON_COUNT = 8;
       });
 
       runStatusCheck();
-      window.setInterval(
-        () => checkStatuses({ markChecking: false }),
-        STATUS_REFRESH_MS,
-      );
+      window.setInterval(runStatusCheck, STATUS_REFRESH_MS);
     </script>
   </body>
 </html>

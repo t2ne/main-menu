@@ -60,7 +60,8 @@ export const APPS: App[] = [
 		name: "Immich",
 		href: "https://photos.no-tone.com",
 		tags: ["Media", "Self-Hosted"],
-		iconUrl: "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/webp/immich.webp",
+		iconUrl:
+			"https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/webp/immich.webp",
 	},
 	{
 		id: "open-cloud",
