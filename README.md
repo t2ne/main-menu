@@ -29,6 +29,34 @@ npm install
 npm run dev
 ```
 
+## Tailnet Status (vpn / up / down)
+
+The UI can only reliably distinguish `vpn` vs `down` if it can reach a tailnet-only HTTP(S) health URL.
+
+On a machine that has Tailscale running, create one:
+
+```bash
+sudo tailscale serve --bg --set-path /health 'text:ok'
+tailscale serve status
+```
+
+Then set:
+
+```bash
+PUBLIC_TAILNET_PROBE_URL=https://<device>.your-tailnet.ts.net/health
+```
+
+Note: `PUBLIC_*` vars are embedded in client JS (not secret). Keeping `.env` out of git still avoids publishing it in your repo.
+
+Useful commands:
+
+```bash
+tailscale serve status
+sudo tailscale serve reset
+```
+
+If the URL works in terminal but not in the browser (`ERR_NAME_NOT_RESOLVED`), disable Secure DNS / DoH in your browser so it uses the OS resolver (Tailscale DNS).
+
 Customize your links in the source as needed.
 
 ---
